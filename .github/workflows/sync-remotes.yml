@@ -1,0 +1,126 @@
+name: Weekly Remote Repository Sync
+
+on:
+  schedule:
+    # Runs every Wednesday at 00:00 UTC
+    # For more info: https://docs.github.com/en/actions/reference/events-that-trigger-workflows#scheduled-events
+    - cron: '0 0 * * 3'
+  workflow_dispatch: # Allows manual triggering from the GitHub Actions tab
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # REQUIRED: Grants the GITHUB_TOKEN write permissions to push changes back to this repository.
+    strategy:
+      matrix:
+        include:
+          - REMOTE_NAME: "Comfy-Org.ComfyUI"
+            REMOTE_URL: "https://github.com/Comfy-Org/ComfyUI.git"
+            UPSTREAM_BRANCH: "master"
+
+          - REMOTE_NAME: "pythongosssss.ComfyUI-Custom-Scripts"
+            REMOTE_URL: "https://github.com/pythongosssss/ComfyUI-Custom-Scripts.git"
+            UPSTREAM_BRANCH: "main"
+
+          - REMOTE_NAME: "kijai.ComfyUI-LivePortraitKJ"
+            REMOTE_URL: "https://github.com/kijai/ComfyUI-LivePortraitKJ.git"
+            UPSTREAM_BRANCH: "main"
+
+          - REMOTE_NAME: "kijai.ComfyUI-KJNodes"
+            REMOTE_URL: "https://github.com/kijai/ComfyUI-KJNodes.git"
+            UPSTREAM_BRANCH: "main"
+
+          - REMOTE_NAME: "Kosinkadink.ComfyUI-VideoHelperSuite"
+            REMOTE_URL: "https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite.git"
+            UPSTREAM_BRANCH: "main"
+
+          - REMOTE_NAME: "cubiq.ComfyUI_Essentials"
+            REMOTE_URL: "https://github.com/cubiq/ComfyUI_Essentials.git"
+            UPSTREAM_BRANCH: "main"
+
+          - REMOTE_NAME: "davisking.dlib-models"
+            REMOTE_URL: "https://github.com/davisking/dlib-models.git"
+            UPSTREAM_BRANCH: "master"
+
+          - REMOTE_NAME: "deepinsight.insightface"
+            REMOTE_URL: "https://github.com/deepinsight/insightface.git"
+            UPSTREAM_BRANCH: "master"
+
+      # fail-fast is implicitly true by default; consider setting to 'false' if
+      # you want all matrix jobs to attempt completion even if one fails.
+      fail-fast: false
+
+    steps:
+      - name: Checkout and target the dynamic branch for sync
+        uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          # Fetch all history for all branches and tags, crucial for robust merging/rebasing.
+          fetch-depth: 0
+          # This 'ref' parameter implicitly defines the target branch in *this* repository
+          # for the sync operation. The branch name is dynamically constructed from
+          # REMOTE_NAME and UPSTREAM_BRANCH (e.g., "Comfy-Org.ComfyUI#master").
+          # actions/checkout sets up the local working tree on this specific branch.
+          ref: "${{ matrix.REMOTE_NAME }}#${{ matrix.UPSTREAM_BRANCH }}"
+
+      - name: Configure Git user and email
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "github-actions-bot@users.noreply.github.com"
+
+      - name: Perform sync from remote and push changes
+        run: |
+          # Add the external remote repository.
+          # The 'git remote add' command will set up a new remote in the local git configuration.
+          git remote add "${{ matrix.REMOTE_NAME }}" "${{ matrix.REMOTE_URL }}"
+
+          # Fetch the specific upstream branch from the newly added external remote.
+          # This brings the remote's changes into the local repository's remote-tracking branches.
+          git fetch "${{ matrix.REMOTE_NAME }}" "${{ matrix.UPSTREAM_BRANCH }}"
+
+          # Pull changes from the fetched remote branch into the *currently checked out branch*
+          # (which was set by 'actions/checkout' to "${{ matrix.REMOTE_NAME }}#${{ matrix.UPSTREAM_BRANCH }}").
+          # '--ff-only' ensures only fast-forward merges are performed. If a non-fast-forward
+          # merge is required, this command will fail, preventing unwanted merge commits or rebases.
+          git pull "${{ matrix.REMOTE_NAME }}" "${{ matrix.UPSTREAM_BRANCH }}" --ff-only
+
+          # Push the updated local branch (which is "${{ matrix.REMOTE_NAME }}#${{ matrix.UPSTREAM_BRANCH }}")
+          # back to 'origin' (this repository). The 'GITHUB_TOKEN' with write permissions
+          # allows this push operation.
+          git push origin
+
+      - name: Sync Git tags from remote
+        run: |
+          #
+          # Fetch all tags from the specified upstream. --no-recurse-submodules prevents fetching submodules tags, if any.
+          #
+          git fetch "${{ matrix.REMOTE_NAME }}" --tags --no-recurse-submodules
+
+          #
+          # List all tags from the upstream, parsing output for SHA and tag name
+          #
+          git ls-remote --tags "${{ matrix.REMOTE_NAME }}" | while read -r UPSTREAM_TAG_SHA UPSTREAM_TAG_REF; do
+            # Extract the actual tag name (e.g., 'v1.0.0' from 'refs/tags/v1.0.0')
+            UPSTREAM_TAG=$(basename "${UPSTREAM_TAG_REF}")
+
+            #
+            # Construct the new tag name for *this* repository
+            #
+            NEW_LOCAL_TAG="${{ matrix.REMOTE_NAME }}#${UPSTREAM_TAG}"
+
+            # Check if the new local tag already exists in the local repository
+            EXISTING_LOCAL_TAG_REF=$(git rev-parse --verify "refs/tags/${NEW_LOCAL_TAG}" 2>/dev/null)
+            if [ $? -eq 0 ]; then
+              echo "Local tag '${NEW_LOCAL_TAG}' already exists with ref '${EXISTING_LOCAL_TAG_REF}'. Skipping."
+              if [ "${EXISTING_LOCAL_TAG_REF}" == "${UPSTREAM_TAG_REF}" ]; then
+                echo "Local tag ref equals to upstream tag ref. Skipping."
+              else
+                echo "Local tag ref '${EXISTING_LOCAL_TAG_REF}' is NOT equal to upstream tag ref '${UPSTREAM_TAG_REF}'. Skipping." >&2
+                exit 42
+              fi
+            else
+              git tag "${NEW_LOCAL_TAG}" "${UPSTREAM_TAG_SHA}"
+            fi
+          done
+          #git push origin --tags
