@@ -30,6 +30,32 @@ pip install --requirement requirements-gpucu126.txt
 python3 ComfyUI.Runtime/main.py --listen 0.0.0.0 --base-directory ComfyUI.Data/ --database-url sqlite:///ComfyUI.Data/user/comfyui.db
 ```
 
+## Get Started (Docker + CPU)
+
+```shell
+docker pull ghcr.io/theanurin/comfyui/comfyui-liveportrait/cpu
+docker run --rm \
+  --interactive \
+  --tty \
+  --publish 127.0.0.1:8188:8188 \
+  --volume ComfyUILivePortraitUserData:/data/user \
+  ghcr.io/theanurin/comfyui/comfyui-liveportrait/cpu
+```
+
+
+## Get Started (Docker + Nvidia GTX 1060 6GB)
+
+```shell
+docker pull ghcr.io/theanurin/comfyui/comfyui-liveportrait/gpucu126
+docker run --rm \
+  --interactive \
+  --tty \
+  --publish 127.0.0.1:8188:8188 \
+  --volume ComfyUILivePortraitUserData:/data/user \
+  --gpus all \
+  ghcr.io/theanurin/comfyui/comfyui-liveportrait/gpucu126
+```
+
 ## Overview
 
 This setup is specifically tailored for the **[Live Portrait](https://liveportrait.github.io)** playground. It leverages Git submodules to lock original source code to specific commits and provides a curated `requirements.txt` with strictly pinned versions. The goal is to ensure **long-term reproducibility**, allowing the environment to be rebuilt reliably regardless of future updates to external libraries.

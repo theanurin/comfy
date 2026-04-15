@@ -1,0 +1,184 @@
+#
+# Copied from https://github.com/edgebus/pipelines/blob/15efe310349218d1ea3ff07e6c7e22ee0661c9ba/docker-image-release.yml
+#
+# See for documentation at https://github.com/edgebus/pipelines/blob/15efe310349218d1ea3ff07e6c7e22ee0661c9ba/docker-image.md
+#
+
+name: Docker Image
+
+env:
+  # Comma separated list of Docker platforms
+  #DOCKER_PLATFORMS: linux/amd64,linux/arm64,linux/riscv64,linux/ppc64le,linux/s390x,linux/386,linux/arm/v7,linux/arm/v6
+  DOCKER_PLATFORMS: linux/amd64
+  # Set path to GitHub Container Repository
+  REGISTRY_GHCR_REPOSITORY_PATH: "${{ github.repository }}"
+  # REGISTRY_GHCR_REPOSITORY_PATH: "${{ github.repository }}/orphan-branch"
+
+on:
+  push:
+    tags:
+      - '*'
+      #- 'orphan-branch-*'
+
+run-name: Docker Images (${{ format('{0}.{1}', github.ref_name, github.sha) }})
+
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    outputs:
+      build_commit_short_sha: ${{ steps.build_vars.outputs.commit_short_sha }}
+      build_commit_ref: ${{ steps.build_vars.outputs.commit_ref }}
+      build_commit_timestamp: ${{ steps.build_vars.outputs.commit_timestamp }}
+      build_dockerhub_publish: ${{ steps.build_vars.outputs.dockerhub_publish }}
+      build_image_tag_version: ${{ steps.build_vars.outputs.image_tag_version }}
+      build_image_tag_version_major: ${{ steps.build_vars.outputs.image_tag_version_major }}
+      build_image_tag_version_major_minor: ${{ steps.build_vars.outputs.image_tag_version_major_minor }}
+      build_is_release_candidate: ${{ steps.build_vars.outputs.is_release_candidate }}
+      build_pipeline_url: ${{ steps.build_vars.outputs.pipeline_url }}
+      build_project_url: ${{ steps.build_vars.outputs.project_url }}
+      build_rc_version: ${{ steps.build_vars.outputs.rc_version }}
+      build_tag_version: ${{ steps.build_vars.outputs.tag_version }}
+      build_tag_version_major: ${{ steps.build_vars.outputs.tag_version_major }}
+      build_tag_version_major_minor: ${{ steps.build_vars.outputs.tag_version_major_minor }}
+      build_version_appender: ${{ steps.build_vars.outputs.version_appender }}
+      build_platforms: ${{ steps.platforms.outputs.platforms }}
+      build_platforms_count: ${{ steps.platforms.outputs.platforms_count }}
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+
+    - name: Detect build platforms
+      id: platforms
+      run: |
+        PLATFORMS_JSON_ARRAY=$(echo "\"$DOCKER_PLATFORMS\""  | jq -c 'split(",")')
+        PLATFORMS_COUNT=$(echo "${PLATFORMS_JSON_ARRAY}" | jq '. | length')
+        echo "Build for ${PLATFORMS_COUNT} platform(s): ${DOCKER_PLATFORMS}"
+        echo "platforms=${PLATFORMS_JSON_ARRAY}" | tee -a "${GITHUB_OUTPUT}"
+        echo "platforms_count=${PLATFORMS_COUNT}" | tee -a "${GITHUB_OUTPUT}"
+
+    - name: Build variables
+      id: build_vars
+      run: |
+        BUILD__VERSION_RC_NUMBER=""
+        if echo -n "${{ github.ref_name }}" | egrep -qe '-rc[0-9]+$'; then
+          BUILD__VERSION_RC_NUMBER="$(echo -n "${{ github.ref_name }}" | sed 's/^.*-rc//')"
+        fi
+        SHORT_SHA=$(echo "${{ github.sha }}" | head -c 8)
+        BUILD__PIPELINE__REF="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        BUILD__COMMIT__REF="${{ github.sha }}"
+        BUILD__COMMIT__TIMESTAMP="${{ github.event.head_commit.timestamp }}"
+        BUILD__PROJECT__REF="${{ github.server_url }}/${{ github.repository }}"
+        if [ -n "${BUILD__VERSION_RC_NUMBER}" ]; then
+          BUILD__VERSION="$(echo -n "${{ github.ref_name }}" | rev | cut -d- -f2 | rev)"
+          BUILD__VERSION_APPENDER="-rc${BUILD__VERSION_RC_NUMBER}"
+          BUILD_IS_RELEASE_CANDIDATE="yes"
+          BUILD_IMAGE_TAG_VERSION="${BUILD__VERSION}-rc${BUILD__VERSION_RC_NUMBER}"
+        else
+          BUILD__VERSION=$(echo -n "${{ github.ref_name }}" | rev | cut -d- -f1 | rev)
+          BUILD__VERSION_APPENDER=""
+          BUILD_IS_RELEASE_CANDIDATE="no"
+          BUILD__VERSION_MAJOR="$(echo "${BUILD__VERSION}" | cut -d. -f1)"
+          BUILD__VERSION_MAJOR_MINOR="$(echo "${BUILD__VERSION}" | cut -d. -f1-2)"
+          BUILD_IMAGE_TAG_VERSION="${BUILD__VERSION}"
+          BUILD_IMAGE_TAG_VERSION_MAJOR="${BUILD__VERSION_MAJOR}"
+          BUILD_IMAGE_TAG_VERSION_MAJOR_MINOR="${BUILD__VERSION_MAJOR_MINOR}"
+        fi
+
+        echo "commit_short_sha=${SHORT_SHA}" | tee -a "${GITHUB_OUTPUT}"
+        echo "commit_ref=${BUILD__COMMIT__REF}" | tee -a "${GITHUB_OUTPUT}"
+        echo "commit_timestamp=${BUILD__COMMIT__TIMESTAMP}" | tee -a "${GITHUB_OUTPUT}"
+        if [ -n "${REGISTRY_DOCKERHUB_REPOSITORY_ORG}" ]; then
+          echo "dockerhub_publish=yes" | tee -a "${GITHUB_OUTPUT}"
+        else
+          echo "dockerhub_publish=no" | tee -a "${GITHUB_OUTPUT}"
+        fi
+        echo "image_tag_version=${BUILD_IMAGE_TAG_VERSION}" | tee -a "${GITHUB_OUTPUT}"
+        echo "image_tag_version_major=${BUILD_IMAGE_TAG_VERSION_MAJOR}" | tee -a "${GITHUB_OUTPUT}"
+        echo "image_tag_version_major_minor=${BUILD_IMAGE_TAG_VERSION_MAJOR_MINOR}" | tee -a "${GITHUB_OUTPUT}"
+        echo "is_release_candidate=${BUILD_IS_RELEASE_CANDIDATE}" | tee -a "${GITHUB_OUTPUT}"
+        echo "pipeline_url=${BUILD__PIPELINE__REF}" | tee -a "${GITHUB_OUTPUT}"
+        echo "project_url=${BUILD__PROJECT__REF}" | tee -a "${GITHUB_OUTPUT}"
+        echo "rc_version=${BUILD__VERSION_RC_NUMBER}" | tee -a "${GITHUB_OUTPUT}"
+        echo "tag_version=${BUILD__VERSION}" | tee -a "${GITHUB_OUTPUT}"
+        echo "tag_version_major=${BUILD__VERSION_MAJOR}" | tee -a "${GITHUB_OUTPUT}"
+        echo "tag_version_major_minor=${BUILD__VERSION_MAJOR_MINOR}" | tee -a "${GITHUB_OUTPUT}"
+        echo "version_appender=${BUILD__VERSION_APPENDER}" | tee -a "${GITHUB_OUTPUT}"
+
+  docker-build:
+    needs:
+    - configure
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        build_configuration: [ 'cpu', 'gpucu126' ]
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+      with:
+        lfs: true
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v4
+
+    - name: Log in to the GitHub Container Registry
+      uses: docker/login-action@v4
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Build docker image
+      uses: docker/build-push-action@v7
+      with:
+        context: .
+        file: docker/Dockerfile
+        build-args: |
+          BUILD__CONFIGURATION=${{ matrix.build_configuration }}
+          BUILD__COMMIT__REF=${{ needs.configure.outputs.build_commit_ref }}
+          BUILD__COMMIT__TIMESTAMP=${{ needs.configure.outputs.build_commit_timestamp }}
+          BUILD__PIPELINE__REF=${{ needs.configure.outputs.build_pipeline_url }}
+          BUILD__PROJECT__REF=${{ needs.configure.outputs.build_project_url }}
+          BUILD__VERSION_RC_NUMBER=${{ needs.configure.outputs.build_rc_version }}
+          BUILD__VERSION=${{ needs.configure.outputs.build_tag_version }}
+          BUILD__VERSION_APPENDER=${{ needs.configure.outputs.build_version_appender }}
+        platforms: ${{ join(fromJson(needs.configure.outputs.build_platforms), ',') }}
+        push: true
+        tags: "ghcr.io/${{ env.REGISTRY_GHCR_REPOSITORY_PATH }}/comfyui-liveportrait/${{ matrix.build_configuration }}:${{ needs.configure.outputs.build_image_tag_version }}.${{ github.sha }}"
+
+  publish-github:
+    needs:
+    - configure
+    - docker-build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        build_configuration: [ 'cpu', 'gpucu126' ]
+    steps:
+    - name: Log in to the GitHub Container Registry
+      uses: docker/login-action@v4
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Tags and push
+      run: |
+        skopeo copy --all \
+          "docker://ghcr.io/${{ env.REGISTRY_GHCR_REPOSITORY_PATH }}/comfyui-liveportrait/${{ matrix.build_configuration }}:${{ needs.configure.outputs.build_image_tag_version }}.${{ github.sha }}" \
+          "docker://ghcr.io/${{ env.REGISTRY_GHCR_REPOSITORY_PATH }}/comfyui-liveportrait/${{ matrix.build_configuration }}:${{ needs.configure.outputs.build_image_tag_version }}.${{ needs.configure.outputs.build_commit_short_sha }}"
+        skopeo copy --all \
+          "docker://ghcr.io/${{ env.REGISTRY_GHCR_REPOSITORY_PATH }}/comfyui-liveportrait/${{ matrix.build_configuration }}:${{ needs.configure.outputs.build_image_tag_version }}.${{ github.sha }}" \
+          "docker://ghcr.io/${{ env.REGISTRY_GHCR_REPOSITORY_PATH }}/comfyui-liveportrait/${{ matrix.build_configuration }}:${{ needs.configure.outputs.build_image_tag_version }}"
+        if [ "${{ needs.configure.outputs.build_is_release_candidate }}" == "no" ]; then
+          skopeo copy --all \
+            "docker://ghcr.io/${{ env.REGISTRY_GHCR_REPOSITORY_PATH }}/comfyui-liveportrait/${{ matrix.build_configuration }}:${{ needs.configure.outputs.build_image_tag_version }}.${{ github.sha }}" \
+            "docker://ghcr.io/${{ env.REGISTRY_GHCR_REPOSITORY_PATH }}/comfyui-liveportrait/${{ matrix.build_configuration }}:${{ needs.configure.outputs.build_image_tag_version_major_minor }}"
+          skopeo copy --all \
+            "docker://ghcr.io/${{ env.REGISTRY_GHCR_REPOSITORY_PATH }}/comfyui-liveportrait/${{ matrix.build_configuration }}:${{ needs.configure.outputs.build_image_tag_version }}.${{ github.sha }}" \
+            "docker://ghcr.io/${{ env.REGISTRY_GHCR_REPOSITORY_PATH }}/comfyui-liveportrait/${{ matrix.build_configuration }}:${{ needs.configure.outputs.build_image_tag_version_major }}"
+          skopeo copy --all \
+            "docker://ghcr.io/${{ env.REGISTRY_GHCR_REPOSITORY_PATH }}/comfyui-liveportrait/${{ matrix.build_configuration }}:${{ needs.configure.outputs.build_image_tag_version }}.${{ github.sha }}" \
+            "docker://ghcr.io/${{ env.REGISTRY_GHCR_REPOSITORY_PATH }}/comfyui-liveportrait/${{ matrix.build_configuration }}:latest"
+        fi
