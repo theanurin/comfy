@@ -42,7 +42,6 @@ docker run --rm \
   ghcr.io/theanurin/comfyui/comfyui-liveportrait/cpu
 ```
 
-
 ## Get Started (Docker + Nvidia GTX 1060 6GB)
 
 ```shell

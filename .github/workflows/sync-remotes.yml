@@ -7,6 +7,9 @@ on:
     - cron: '0 0 * * 3'
   workflow_dispatch: # Allows manual triggering from the GitHub Actions tab
 
+permissions:
+  actions: write
+
 jobs:
   sync:
     runs-on: ubuntu-latest
@@ -90,37 +93,48 @@ jobs:
           # allows this push operation.
           git push origin
 
-      - name: Sync Git tags from remote
-        run: |
-          #
-          # Fetch all tags from the specified upstream. --no-recurse-submodules prevents fetching submodules tags, if any.
-          #
-          git fetch "${{ matrix.REMOTE_NAME }}" --tags --no-recurse-submodules
+      #
+      # ! [remote rejected]   Comfy-Org.ComfyUI#v0.0.1 -> Comfy-Org.ComfyUI#v0.0.1 
+      # (refusing to allow a GitHub App to create or update workflow 
+      # `.github/workflows/stable-release.yml` without `workflows` permission)
+      #
+      # - name: Sync Git tags from remote
+      #   run: |
+      #     #
+      #     # List all tags from the upstream, parsing output for SHA and tag name
+      #     #
+      #     git ls-remote --tags "${{ matrix.REMOTE_NAME }}" | while read -r UPSTREAM_TAG_SHA UPSTREAM_TAG_REF; do
+      #       # Extract the actual tag name (e.g., 'v1.0.0' from 'refs/tags/v1.0.0')
+      #       UPSTREAM_TAG=$(basename "${UPSTREAM_TAG_REF}")
+      #       echo "Actual upstream tag name: ${UPSTREAM_TAG} -> ${UPSTREAM_TAG_SHA}"
 
-          #
-          # List all tags from the upstream, parsing output for SHA and tag name
-          #
-          git ls-remote --tags "${{ matrix.REMOTE_NAME }}" | while read -r UPSTREAM_TAG_SHA UPSTREAM_TAG_REF; do
-            # Extract the actual tag name (e.g., 'v1.0.0' from 'refs/tags/v1.0.0')
-            UPSTREAM_TAG=$(basename "${UPSTREAM_TAG_REF}")
+      #       if [ "${UPSTREAM_TAG}" == "latest" ]; then
+      #         echo "Skip tag 'latest'."
+      #         continue
+      #       fi
 
-            #
-            # Construct the new tag name for *this* repository
-            #
-            NEW_LOCAL_TAG="${{ matrix.REMOTE_NAME }}#${UPSTREAM_TAG}"
+      #       #
+      #       # Construct the new tag name for *this* repository
+      #       #
+      #       NEW_LOCAL_TAG="${{ matrix.REMOTE_NAME }}#${UPSTREAM_TAG}"
+      #       echo "New tag name: ${NEW_LOCAL_TAG}"
 
-            # Check if the new local tag already exists in the local repository
-            EXISTING_LOCAL_TAG_REF=$(git rev-parse --verify "refs/tags/${NEW_LOCAL_TAG}" 2>/dev/null)
-            if [ $? -eq 0 ]; then
-              echo "Local tag '${NEW_LOCAL_TAG}' already exists with ref '${EXISTING_LOCAL_TAG_REF}'. Skipping."
-              if [ "${EXISTING_LOCAL_TAG_REF}" == "${UPSTREAM_TAG_REF}" ]; then
-                echo "Local tag ref equals to upstream tag ref. Skipping."
-              else
-                echo "Local tag ref '${EXISTING_LOCAL_TAG_REF}' is NOT equal to upstream tag ref '${UPSTREAM_TAG_REF}'. Skipping." >&2
-                exit 42
-              fi
-            else
-              git tag "${NEW_LOCAL_TAG}" "${UPSTREAM_TAG_SHA}"
-            fi
-          done
-          #git push origin --tags
+      #       # Check if the new local tag already exists in the local repository
+      #       set +e
+      #       EXISTING_LOCAL_TAG_SHA=$(git rev-parse --verify "refs/tags/${NEW_LOCAL_TAG}" 2>/dev/null)
+      #       set -e
+      #       if [ -n "${EXISTING_LOCAL_TAG_SHA}" ]; then
+      #         echo "Local tag already exists: ${NEW_LOCAL_TAG} -> ${EXISTING_LOCAL_TAG_SHA}"
+      #         if [ "${EXISTING_LOCAL_TAG_SHA}" == "${UPSTREAM_TAG_SHA}" ]; then
+      #           echo "Local tag ref equals to upstream tag ref. Skipping."
+      #         else
+      #           echo "Local tag ref '${EXISTING_LOCAL_TAG_SHA}' is NOT equal to upstream tag ref '${UPSTREAM_TAG_REF}'. Skipping." >&2
+      #           exit 42
+      #         fi
+      #       else
+      #         echo "Creating tag ${NEW_LOCAL_TAG} -> ${UPSTREAM_TAG_SHA}"
+      #         git fetch "${{ matrix.REMOTE_NAME }}" "${UPSTREAM_TAG_SHA}"
+      #         git tag "${NEW_LOCAL_TAG}" "${UPSTREAM_TAG_SHA}"
+      #         git push origin "${NEW_LOCAL_TAG}"
+      #       fi
+      #     done
