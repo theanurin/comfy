@@ -50,6 +50,7 @@ huggingface_hub==1.10.2
 idna==3.11
 ImageIO==2.37.3
 imageio-ffmpeg==0.6.0
+insightface==0.7.3
 jax==0.7.1
 jaxlib==0.7.1
 Jinja2==3.1.6

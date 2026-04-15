@@ -8,4 +8,4 @@
 ComfyUI.Data/input/
 ComfyUI.Data/output/
 ComfyUI.Data/temp/
-ComfyUI.Data/user/
+ComfyUI.Data/user/comfyui.db*

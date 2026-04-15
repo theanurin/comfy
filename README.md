@@ -19,15 +19,15 @@
 ```shell
 python3.12 -m venv .venv && source .venv/bin/activate
 pip install --requirement requirements-cpu.txt
-python3 ComfyUI.Runtime/main.py --listen 0.0.0.0 --base-directory ComfyUI.Data/ --cpu
+python3 ComfyUI.Runtime/main.py --cpu --listen 0.0.0.0 --base-directory ComfyUI.Data/ --database-url sqlite:///ComfyUI.Data/user/comfyui.db
 ```
 
 ## Get Started (Gentoo + Nvidia GTX 1060 6GB)
 
 ```shell
 python3.12 -m venv .venv && source .venv/bin/activate
-pip install --requirement requirements-gpu-cu126.txt
-python3 ComfyUI.Runtime/main.py --listen 0.0.0.0 --base-directory ComfyUI.Data/
+pip install --requirement requirements-gpucu126.txt
+python3 ComfyUI.Runtime/main.py --listen 0.0.0.0 --base-directory ComfyUI.Data/ --database-url sqlite:///ComfyUI.Data/user/comfyui.db
 ```
 
 ## Overview
