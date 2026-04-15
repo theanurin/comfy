@@ -1,2 +1,13 @@
 --requirement requirements.txt
+--extra-index-url https://download.pytorch.org/whl/cpu
+
 onnxruntime==1.24.4
+
+torch==2.11.0 ; sys_platform == 'darwin'
+torch==2.11.0+cpu ; sys_platform == 'linux'
+
+torchaudio==2.11.0 ; sys_platform == 'darwin'
+torchaudio==2.11.0+cpu ; sys_platform == 'linux'
+
+torchvision==0.26.0 ; sys_platform == 'darwin'
+torchvision==0.26.0+cpu ; sys_platform == 'linux'

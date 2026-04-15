@@ -131,10 +131,7 @@ tifffile==2026.3.3
 timm==1.0.26
 tokenizers==0.22.2
 tomli==2.4.1
-torch==2.11.0
-torchaudio==2.11.0
 torchsde==0.2.6
-torchvision==0.26.0
 tqdm==4.67.3
 trampoline==0.1.2
 transformers==5.5.4
